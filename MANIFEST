@@ -1,0 +1,7 @@
+Changes
+MANIFEST
+Makefile.PL
+README
+lib/Sub/Stubber.pm
+t/00-all.t
+t/dummy.pm
