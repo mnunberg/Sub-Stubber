@@ -9,10 +9,18 @@ our @EXPORT = qw(expensive_function);
 our @ISA = qw(Sub::Stubber Exporter);
 
 Sub::Stubber->regstubs('expensive_function');
+Sub::Stubber->regstubs({
+        replaced_function => sub { 1 }
+    });
+
 Sub::Stubber->add_trigger(env => 'DOUBLE_FACED_DUMMIES');
 
 sub expensive_function ($$$) {
     'expensive calculation';
+}
+
+sub replaced_function {
+    0;
 }
 
 package dummy_trigger;
@@ -53,5 +61,23 @@ sub import {
 sub cheapo { 'cheap_function' }
 sub returns_a_value { 0xdeadbeef }
 
+package dummy_notrigger;
+use strict;
+use warnings;
+use Sub::Stubber;
+use parent qw(Sub::Stubber Exporter);
+our @EXPORT = qw(foofunc);
+
+Sub::Stubber->regstubs({
+        foofunc => sub { 0 }
+    });
+Sub::Stubber->add_trigger(import => 'dont_use_this');
+
+sub foofunc {
+    1;
+}
+BEGIN {
+    $INC{'dummy_notrigger.pm'} = 1;
+}
 
 1;

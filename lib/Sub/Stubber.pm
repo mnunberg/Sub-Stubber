@@ -4,18 +4,13 @@ use warnings;
 use Class::Struct;
 
 struct __PACKAGE__,
-    ['names' => '@',
+    ['names' => '%',
      'import_triggers' => '@',
      'env_triggers'     => '@',
      'triggered'        => '$',
      'imported_into'    => '@',
      ];
      
-sub add_name {
-    my ($self,$name) = @_;
-    push @{$self->names}, $name;
-}
-
 sub add_trigger {
     my ($self,$type,$name) = @_;
     if($type eq 'env') {
@@ -24,6 +19,21 @@ sub add_trigger {
         push @{$self->import_triggers}, $name;
     } else {
         die("No such trigger type '$type'");
+    }
+}
+
+sub add_specs {
+    my ($self,@specs) = @_;
+    foreach my $spec (@specs) {
+        if(!ref $spec) {
+            $self->names->{$spec} = undef;
+        } elsif (ref $spec eq 'HASH') {
+            while ( my ($name,$val) = each %$spec ) {
+                $self->names->{$name} = $val;
+            }
+        } else {
+            die ("Bad specifier '$spec'");
+        }
     }
 }
 
@@ -36,7 +46,7 @@ no strict 'refs';
 no warnings 'redefine';
 
 our %PkgCache;
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 
 sub get_object {
@@ -54,18 +64,27 @@ sub _mk_sub_real {
     }
     
     my $old_proto = prototype $subname;
-    if(defined $old_proto) {
+
+    #Hope the prototype is right!
+    if(defined $value && ref $value eq 'CODE') {
+        *{$subname} = $value;
+    } 
+    elsif(defined $old_proto) {
         eval "*$subname = sub ($old_proto) { \$value };";
-    } else {
+    }
+    else {
         *{$subname} = sub { $value };
     }
 }
 
+#The next two provide some sugary API at the expense of a bleh-like 
+#implementation. the functions are too simple to warrant an 
+#elaborate dispatch scheme, unfortunately
+
 sub regstubs {
-    
     my $cls = shift;
     my $cpkg = $cls eq __PACKAGE__ ? caller : $cls;
-    push @{ get_object($cpkg)->names }, @_;
+    get_object($cpkg)->add_specs(@_);
 }
 
 sub add_trigger {
@@ -75,37 +94,21 @@ sub add_trigger {
 }
 
 sub mkstubs {
-    
+
     my $cls = shift;
     my $cpkg = $cls eq __PACKAGE__ ? caller : $cls;
-    
     if(!exists $PkgCache{$cpkg} && @_ == 0) {
-        use Data::Dumper;
-        print Dumper(\%PkgCache);
-        
         die("No functions registered and non provided to mkstubs()");
     }
     my $obj = $PkgCache{$cpkg};
-    if($obj->triggered) {
-        return;
-    }
+    return if $obj->triggered();
     
+    $obj->add_specs(@_);
+    while (my ($subname,$subval) = each %{$obj->names}) {
+        _mk_sub_real($cpkg,$subname,$subval);
+    }
+
     $obj->triggered(1);
-    
-    my @sublist = @{$obj->names};
-    
-    foreach my $subspec (@sublist) {
-        if(!ref $subspec) {
-            _mk_sub_real($cpkg, $subspec, undef);
-        } else {
-            if(ref $subspec ne 'HASH') {
-                die("Expected hash reference!");
-            }
-            while (my ($subname,$subval) = each %$subspec) {
-                _mk_sub_real($cpkg,$subname,$subval);
-            }
-        }
-    }
 }
 
 sub _import_as_base {
@@ -231,12 +234,49 @@ inheritance and/or package methods:
 Register one or more sub specifications to be used in conjunction with the calling
 package.
 
+
 A stub specification can either be a simple name, or a hash reference.
 
-In the case of the former, a simple function is generated that returns C<undef>.
-In the case of the latter, the hash reference is taken to contain one or more pairs
-of function names as keys, and their intended return values as values. Value can
-be any scalar
+=over
+
+=item String
+
+    Sub::Stubber->regstubs('foo_function');
+
+When strings are used, a function returning undef will be triggered for it.
+
+=item Hash Reference
+
+    Sub::Stubber->regstubs( { 
+        get_everything => 42 
+    } );
+    Sub::Stubber->regstubs( { 
+        naive_implementation => sub { rand(10) } 
+    } );
+
+Hash reference specifications can contain one or more key-value pairs. The keys
+are the function names to be replaced. The value can either be a simple scalar,
+or a C<CODE> reference.
+
+In the case of the former, the value is returned as is from the function.
+In the case of the latter, the C<CODE> reference itself is interpreted to be
+the replacement function. [ If you need to have a function which itself actually
+returns a function, you should provide a C<CODE> reference which does just that ].
+
+=back
+
+Prototypes are fetched from the original function and applied to the new one.
+
+It is also possible to specify multiple definitions in a single call, thus, the
+following is perfectly valid: 
+
+    Sub::Stubber->regstubs(
+        'foo_function',
+        {
+            get_everything => 42,,
+            naive_implementation => sub { rand(10) }
+        }
+    );
 
 =head3 Sub::Stubber->add_trigger(trigger_type, trigger_name)
 
