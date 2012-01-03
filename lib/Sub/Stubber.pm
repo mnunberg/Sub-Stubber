@@ -40,13 +40,12 @@ sub add_specs {
 package Sub::Stubber;
 use strict;
 
-use Log::Fu;
 
 no strict 'refs';
 no warnings 'redefine';
 
 our %PkgCache;
-our $VERSION = 0.02;
+our $VERSION = 0.03;
 
 
 sub get_object {

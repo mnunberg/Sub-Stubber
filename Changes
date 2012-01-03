@@ -1,4 +1,6 @@
 Revision history for Sub-Stubber
+0.03    Jan 02 2012
+        Remove use Log::Fu line
 0.02    Jan 02 2012
         Add support for subroutine replacement
 
